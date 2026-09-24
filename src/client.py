@@ -1,10 +1,27 @@
 import argparse
+import random
 import socket
 import sys
 import time
 
-from common.protocol import MessageReader, MessageType, Service
+from common.protocol import MessageReader, MessageType, Service, build_request, send_message, new_message_id
 
+SAMPLE_SENTENCES = [
+    "jaringan komputer itu menyenangkan",
+    "protokol adalah aturan komunikasi",
+    "socket TCP menjamin pengiriman data",
+    "python mudah dipakai untuk prototyping",
+    "client server architecture is everywhere",
+    "tugas jaringan komputer semester ini",
+]
+
+def random_matrix():
+    return [[random.randint(0, 5) for _ in range(3)] for _ in range(3)]
+
+def random_payload(service):
+    if service == Service.MATRIX_OPS:
+        return {"matriks": random_matrix()}
+    return {"text": random.choice(SAMPLE_SENTENCES)}
 
 class Client:
     def __init__(self, host="127.0.0.1", port=5000, delay=1.5, max_requests=None):
@@ -29,12 +46,17 @@ class Client:
         self.reader = MessageReader(self.sock)
         self.log(f"Terhubung ke server {self.host}:{self.port}")
 
-    # TODO (P2): 
-    # - Buat struktur pesan request (pilih layanan, susun payload).
-    # - Simpan request ke `self.pending` untuk dicocokkan nanti.
-    # - Kirim pesan ke server melalui `self.sock`.
     def send_request(self):
-        raise NotImplementedError("TODO (Person 2)")
+        service = random.choice(list(self.enabled_services))
+        payload = random_payload(service)
+        expected = self.compute_expected(service, payload)
+
+        msg_id = new_message_id()
+        req = build_request(msg_id, service, payload)
+        self.pending[msg_id] = (service, payload, expected)
+
+        send_message(self.sock, req)
+        self.log(f"Mengirim REQUEST id={msg_id} service={service} payload={payload}")
 
     # TODO (P3): 
     # - Hitung hasil yang diharapkan (expected result) secara lokal di client
@@ -67,7 +89,6 @@ class Client:
         self.connect()
         request_count = 0
 
-        try:
             while not self.stopped:
                 if self.max_requests is not None and request_count >= self.max_requests:
                     self.log("Batas jumlah request tercapai, client berhenti.")
@@ -97,7 +118,7 @@ class Client:
 
                 if not self.stopped:
                     time.sleep(self.delay)
-        finally:
+                    
             self.log("Menutup koneksi client.")
             if self.sock:
                 self.sock.close()
@@ -113,14 +134,7 @@ def main():
 
     client = Client(host=args.host, port=args.port, delay=args.delay, max_requests=args.requests)
     
-    try:
-        client.run()
-    except KeyboardInterrupt:
-        print("\nDihentikan oleh pengguna (Ctrl+C). Keluar...")
-        client.stopped = True
-    finally:
-        sys.exit(0)
-
-
+    client.run()
+    
 if __name__ == "__main__":
     main()
