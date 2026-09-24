@@ -1,0 +1,20 @@
+# Cache & bytecode Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Log lokal saat testing
+*.log
+
+# File OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
