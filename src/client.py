@@ -29,7 +29,7 @@ def random_matrix():
 
 def random_payload(service):
     if service == Service.MATRIX_OPS:
-        return {"matriks": random_matrix()}
+        return {"matrix": random_matrix()}
     return {"text": random.choice(SAMPLE_SENTENCES)}
 
 class Client:
@@ -96,19 +96,36 @@ class Client:
     def results_match(self, service, expected, received):
         return expected == received
 
-    # TODO (P4): 
-    # - Ambil data dari `msg` respons server.
-    # - Cari request aslinya di `self.pending`.
-    # - Panggil `compute_expected` dan `results_match` dari Person 3 untuk validasi.
-    # - Cetak log sukses atau gagalnya.
     def handle_response(self, msg):
-        raise NotImplementedError("TODO (Person 4)")
+        msg_id = msg.get("id")
+        
+        if msg_id not in self.pending:
+            self.log(f"[RESPONSE UNKNOWN] Menerima respon dengan ID tidak dikenal: {msg_id}")
+            return
 
-    # TODO (P4): 
-    # - Tangani jika pesan dari server berupa broadcast/notifikasi.
-    # - Tampilkan isi pesan notifikasi tersebut ke layar (log).
+        service, payload, expected = self.pending.pop(msg_id)
+
+        if msg.get("status") == "ERROR":
+            error_msg = msg.get("error", "Terjadi kesalahan pada server")
+            self.log(f"[RESPONSE ERROR] id={msg_id} service={service} -> Error: {error_msg}")
+            return
+
+        received = msg.get("payload")
+
+        is_valid = self.results_match(service, expected, received)
+
+        if is_valid:
+            self.log(f"[RESPONSE SUCCESS] id={msg_id} service={service} -> Hasil sesuai (VALID)")
+        else:
+            self.log(
+                f"[RESPONSE MISMATCH] id={msg_id} service={service} -> Hasil TIDAK sesuai!\n"
+                f"  Expected: {expected}\n"
+                f"  Received: {received}"
+            )
+
     def handle_notify(self, msg):
-        raise NotImplementedError("TODO (Person 4)")
+        payload = msg.get("payload", msg)
+        self.log(f"[NOTIFY SERVER] {payload}")
 
     def run(self):
         self.connect()
