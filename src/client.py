@@ -6,6 +6,15 @@ import time
 
 from common.protocol import MessageReader, MessageType, Service, build_request, send_message, new_message_id
 
+from common.text_ops import (
+    count_characters,
+    count_words,
+    reverse_string,
+    remove_vowels,
+)
+
+from common.matrix_ops import determinant_3x3, inverse_3x3
+
 SAMPLE_SENTENCES = [
     "jaringan komputer itu menyenangkan",
     "protokol adalah aturan komunikasi",
@@ -58,18 +67,34 @@ class Client:
         send_message(self.sock, req)
         self.log(f"Mengirim REQUEST id={msg_id} service={service} payload={payload}")
 
-    # TODO (P3): 
-    # - Hitung hasil yang diharapkan (expected result) secara lokal di client
-    #   berdasarkan parameter `service` dan `payload` yang dikirim.
     def compute_expected(self, service, payload):
-        raise NotImplementedError("TODO (Person 3)")
+        if service == Service.COUNT_CHAR:
+            return count_characters(payload["text"])
 
-    # TODO (P3): 
-    # - Bandingkan hasil komputasi lokal (`expected`) dengan hasil 
-    #   yang dikembalikan oleh server (`received`).
-    # - Kembalikan True jika cocok, False jika berbeda.
+        if service == Service.COUNT_WORD:
+            return count_words(payload["text"])
+
+        if service == Service.REVERSE_STRING:
+            return reverse_string(payload["text"])
+
+        if service == Service.REMOVE_VOWELS:
+            return remove_vowels(payload["text"])
+
+        if service == Service.MATRIX_OPS:
+            m = payload["matrix"]
+            det = determinant_3x3(m)
+            inv = inverse_3x3(m)
+
+            return {
+                "determinant": det,
+                "inverse": inv,
+                "invertible": inv is not None
+            }
+
+        raise ValueError(f"Layanan tidak dikenal: {service}")
+
     def results_match(self, service, expected, received):
-        raise NotImplementedError("TODO (Person 3)")
+        return expected == received
 
     # TODO (P4): 
     # - Ambil data dari `msg` respons server.
@@ -88,33 +113,32 @@ class Client:
     def run(self):
         self.connect()
         request_count = 0
+        while not self.stopped:
+            if self.max_requests is not None and request_count >= self.max_requests:
+                self.log("Batas jumlah request tercapai, client berhenti.")
+                break
+            if not self.enabled_services:
+                self.log("Tidak ada layanan aktif yang diketahui, client berhenti.")
+                break
 
-            while not self.stopped:
-                if self.max_requests is not None and request_count >= self.max_requests:
-                    self.log("Batas jumlah request tercapai, client berhenti.")
+            self.send_request()
+            request_count += 1
+
+            got_response = False
+            while not got_response and not self.stopped:
+                msg = self.reader.read_message()
+                if msg is None:
+                    self.log("Koneksi ke server terputus.")
+                    self.stopped = True
                     break
-                if not self.enabled_services:
-                    self.log("Tidak ada layanan aktif yang diketahui, client berhenti.")
-                    break
-
-                self.send_request()
-                request_count += 1
-
-                got_response = False
-                while not got_response and not self.stopped:
-                    msg = self.reader.read_message()
-                    if msg is None:
-                        self.log("Koneksi ke server terputus.")
-                        self.stopped = True
-                        break
                     
-                    if msg["type"] == MessageType.RESPONSE:
-                        self.handle_response(msg)
-                        got_response = True
-                    elif msg["type"] == MessageType.NOTIFY:
-                        self.handle_notify(msg)
-                    else:
-                        self.log(f"Pesan tidak dikenal: {msg}")
+                if msg["type"] == MessageType.RESPONSE:
+                    self.handle_response(msg)
+                    got_response = True
+                elif msg["type"] == MessageType.NOTIFY:
+                    self.handle_notify(msg)
+                else:
+                    self.log(f"Pesan tidak dikenal: {msg}")
 
                 if not self.stopped:
                     time.sleep(self.delay)
