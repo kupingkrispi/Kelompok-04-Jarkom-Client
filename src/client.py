@@ -16,7 +16,11 @@ from common.text_ops import (
     remove_vowels,
 )
 
-from common.matrix_ops import determinant_3x3, inverse_3x3
+from common.matrix_ops import (
+    determinant_3x3,
+    inverse_3x3,
+    matrices_almost_equal,
+)
 
 SAMPLE_SENTENCES = [
     "jaringan komputer itu menyenangkan",
@@ -85,6 +89,15 @@ class Client:
         raise ValueError(f"Layanan tidak dikenal: {service}")
 
     def results_match(self, service, expected, received):
+        if service == Service.MATRIX_OPS:
+            if abs(expected["determinant"] - received["determinant"]) > 1e-4:
+                return False
+
+            return matrices_almost_equal(
+                expected["inverse"],
+                received["inverse"]
+            )
+
         return expected == received
 
     def send_request(self):
