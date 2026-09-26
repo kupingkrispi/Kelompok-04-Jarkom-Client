@@ -28,7 +28,7 @@ SAMPLE_SENTENCES = [
 ]
 
 def random_matrix():
-    return [[random.randint(0, 5) for _ in range(3)] for _ in range(3)]
+    return [[random.randint(-5, 5) for _ in range(3)] for _ in range(3)]
 
 def random_payload(service):
     if service == Service.MATRIX_OPS:
@@ -58,18 +58,6 @@ class Client:
         self.reader = MessageReader(self.sock)
         self.log(f"Terhubung ke server {self.host}:{self.port}")
 
-    def send_request(self):
-        service = random.choice(list(self.enabled_services))
-        payload = random_payload(service)
-        expected = self.compute_expected(service, payload)
-
-        msg_id = new_message_id()
-        req = build_request(msg_id, service, payload)
-        self.pending[msg_id] = (service, payload, expected)
-
-        send_message(self.sock, req)
-        self.log(f"Mengirim REQUEST id={msg_id} service={service} payload={payload}")
-
     def compute_expected(self, service, payload):
         if service == Service.COUNT_CHAR:
             return count_characters(payload["text"])
@@ -98,6 +86,18 @@ class Client:
 
     def results_match(self, service, expected, received):
         return expected == received
+
+    def send_request(self):
+        service = random.choice(list(self.enabled_services))
+        payload = random_payload(service)
+        expected = self.compute_expected(service, payload)
+
+        msg_id = new_message_id()
+        req = build_request(msg_id, service, payload)
+        self.pending[msg_id] = (service, payload, expected)
+
+        send_message(self.sock, req)
+        self.log(f"Mengirim REQUEST id={msg_id} service={service} payload={payload}")
 
     def handle_response(self, msg):
         msg_id = msg["id"]
