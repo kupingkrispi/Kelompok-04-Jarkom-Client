@@ -136,7 +136,6 @@ class Client:
         received = msg["result"]
 
         correct = self.results_match(service, expected, received)
-        # verdict sekarang mengikuti fakta: CORRECT jika cocok, INCORRECT jika tidak cocok
         verdict = Verdict.CORRECT if correct else Verdict.INCORRECT
 
         self.log(
@@ -155,7 +154,6 @@ class Client:
             self.log(msg["message"])
         elif event == Event.SERVICE_DISABLED:
             service = msg["service"]
-            # service yang dinonaktifkan sekarang benar-benar dihapus dari daftar layanan aktif
             self.enabled_services.discard(service)
             self.log(f"NOTIFY: {msg['message']} (sisa layanan aktif: {sorted(self.enabled_services)})")
         elif event == Event.SERVER_SHUTDOWN:
@@ -195,9 +193,12 @@ class Client:
                 if not self.stopped:
                     time.sleep(self.delay)
                     
-            self.log("Menutup koneksi client.")
+        self.log("Menutup koneksi client.")
+        try:
             if self.sock:
                 self.sock.close()
+        except OSError:
+            pass
 
 
 def main():
@@ -210,7 +211,11 @@ def main():
 
     client = Client(host=args.host, port=args.port, delay=args.delay, max_requests=args.requests)
     
-    client.run()
+    try:
+        client.run()
+    except KeyboardInterrupt:
+        print("\nDihentikan oleh pengguna.")
+        sys.exit(0)
     
 if __name__ == "__main__":
     main()
