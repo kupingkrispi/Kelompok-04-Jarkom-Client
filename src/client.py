@@ -4,7 +4,10 @@ import socket
 import sys
 import time
 
-from common.protocol import MessageReader, MessageType, Service, build_request, send_message, new_message_id
+from common.protocol import (
+    MessageReader, Service, Status, Verdict, Event, MessageType,
+    build_request, build_ack, send_message, new_message_id,
+)
 
 from common.text_ops import (
     count_characters,
@@ -97,35 +100,54 @@ class Client:
         return expected == received
 
     def handle_response(self, msg):
-        msg_id = msg.get("id")
-        
-        if msg_id not in self.pending:
-            self.log(f"[RESPONSE UNKNOWN] Menerima respon dengan ID tidak dikenal: {msg_id}")
+        msg_id = msg["id"]
+        service = msg["service"]
+        status = msg["status"]
+
+        info = self.pending.pop(msg_id, None)
+
+        if status == Status.SERVICE_DISABLED:
+            self.log(f"Server menolak: layanan {service} sudah nonaktif. ({msg.get('note')})")
+            self.enabled_services.discard(service)
             return
 
-        service, payload, expected = self.pending.pop(msg_id)
-
-        if msg.get("status") == "ERROR":
-            error_msg = msg.get("error", "Terjadi kesalahan pada server")
-            self.log(f"[RESPONSE ERROR] id={msg_id} service={service} -> Error: {error_msg}")
+        if status == Status.ERROR:
+            self.log(f"Server error untuk service {service}: {msg.get('note')}")
             return
 
-        received = msg.get("payload")
+        if info is None:
+            self.log(f"RESPONSE id={msg_id} tidak dikenali, diabaikan")
+            return
 
-        is_valid = self.results_match(service, expected, received)
+        _, _, expected = info
+        received = msg["result"]
 
-        if is_valid:
-            self.log(f"[RESPONSE SUCCESS] id={msg_id} service={service} -> Hasil sesuai (VALID)")
-        else:
-            self.log(
-                f"[RESPONSE MISMATCH] id={msg_id} service={service} -> Hasil TIDAK sesuai!\n"
-                f"  Expected: {expected}\n"
-                f"  Received: {received}"
-            )
+        correct = self.results_match(service, expected, received)
+        # verdict sekarang mengikuti fakta: CORRECT jika cocok, INCORRECT jika tidak cocok
+        verdict = Verdict.CORRECT if correct else Verdict.INCORRECT
+
+        self.log(
+            f"RESPONSE id={msg_id} service={service} "
+            f"hasil_server={received} | hasil_hitung_sendiri={expected} => {verdict}"
+        )
+
+        ack = build_ack(msg_id, service, verdict,
+                         note=None if correct else f"Diharapkan: {expected}")
+        send_message(self.sock, ack)
+        self.log(f"Mengirim ACK id={msg_id} verdict={verdict}")
 
     def handle_notify(self, msg):
-        payload = msg.get("payload", msg)
-        self.log(f"[NOTIFY SERVER] {payload}")
+        event = msg["event"]
+        if event == Event.WELCOME:
+            self.log(msg["message"])
+        elif event == Event.SERVICE_DISABLED:
+            service = msg["service"]
+            # service yang dinonaktifkan sekarang benar-benar dihapus dari daftar layanan aktif
+            self.enabled_services.discard(service)
+            self.log(f"NOTIFY: {msg['message']} (sisa layanan aktif: {sorted(self.enabled_services)})")
+        elif event == Event.SERVER_SHUTDOWN:
+            self.log(f"NOTIFY: {msg['message']}")
+            self.stopped = True
 
     def run(self):
         self.connect()
